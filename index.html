@@ -1,7 +1,8 @@
+ 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>PILOT MEMORY TEST EXAMPLE</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
@@ -83,17 +84,15 @@
 
 <script>
 /* 
-  UPDATED RANDOM FLIGHT DATA & QUESTIONS LOGIC
-  THAT SATISFIES:
-  1) FLIGHT LEVELS: FL250 → FL410 (STEP 10)
-  2) 30+ AIRCRAFT REGISTRATIONS
-  3) FLIGHT NUMBER = CARRIER + 3–4 DIGITS
-  4) 30+ CITIES
-  5) RUNWAY 01 → 36
-  6) 3 OR 4 TOTAL LEGS
+  RANDOM DATA & QUESTIONS, WITH 2–3 CLASSES SELECTED FROM [ECONOMY, BUSINESS, FIRST].
+  IF A CLASS IS NOT SELECTED, ITS ANSWERS BECOME "N/A".
 */
 
-// 1) FLIGHT LEVELS
+/* --------------------------
+   ARRAYS & RANDOM FUNCTIONS
+-------------------------- */
+
+// 1) FLIGHT LEVELS: FL250 to FL410 (step 10)
 const flightLevels = [
   "FL 250","FL 260","FL 270","FL 280","FL 290","FL 300",
   "FL 310","FL 320","FL 330","FL 340","FL 350","FL 360",
@@ -109,14 +108,14 @@ const registrations = [
   "B-2956","HL-7615","PT-MVA","YL-LCA","T7-ABC","VQ-BSK"
 ];
 
-// 3) FLIGHT NUMBER = RANDOM CARRIER + 3-4 DIGITS
+// 3) RANDOM FLIGHT NUMBER = CARRIER + 3–4 DIGITS
 const carriers = [
   "TG", "QF", "CA", "BA", "AF", "LH", "EK", "SQ", "CX", "UA",
   "DL", "JL", "GA", "MH", "NZ", "AK", "EY", "QR", "KL", "IB",
   "AZ", "SU", "AA", "AC", "AI"
 ];
 function randomFlightNumber() {
-  const carrier = carriers[Math.floor(Math.random() * carriers.length)];
+  const carrier = randElem(carriers);
   const length = randInt(3,4);
   let digits = "";
   for (let i=0; i<length; i++){
@@ -135,137 +134,211 @@ const cities = [
   "ISTANBUL","DOHA","OSAKA","DENPASAR","MOSCOW"
 ];
 
-// 5) RUNWAY: “01” → “36”
+// 5) RANDOM RUNWAY 01–36
 const runwayNumbers = Array.from({length:36}, (_, i) => (i+1).toString().padStart(2,"0"));
 
-// MISC ARRAYS
+// Other arrays
 const aircraftTypes = [
   "AIRBUS 330-300","AIRBUS 340-300","AIRBUS 300-600","AIRBUS 380",
   "BOEING 747-400","BOEING 777-300","BOEING 787-9","AIRBUS A350-900"
 ];
-const altitudeIntercepts = [2500,3000,3500,4000,4500,5000,5500,6000,6500,7000,7500,8000];
-const headings = [100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350];
+const altitudeIntercepts = [2500,3000,3500,4000,4500,5000];
+const headings = [250,260,270,280,290,300,310,320];
 
-// --- RANDOM HELPERS ---
+// Helper random functions
 function randElem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 function randInt(min, max) {
   return Math.floor(Math.random()*(max-min+1)) + min;
 }
+function shuffleArr(arr) {
+  for (let i=arr.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+// random flight time in format "H:MM"
 function randomFlightTime() {
   const hrs = randInt(1,7);
   const mins = randInt(0,59).toString().padStart(2,"0");
   return `${hrs}:${mins}`;
 }
 
-// Generate flight data with 3 or 4 legs
+/* 
+   Generate test data:
+   1) 2 or 3 classes from [ECONOMY, BUSINESS, FIRST]
+   2) 3–4 legs
+   3) For each chosen class, random total passenger count
+   4) For each intermediate stop, random on/off for each chosen class
+*/
 function generateTestData() {
-  // Number of legs: 3 or 4
+  // Random how many classes: 2 or 3
+  const possibleClasses = ["ECONOMY", "BUSINESS", "FIRST"];
+  shuffleArr(possibleClasses);
+  const numClasses = randInt(2,3);
+  const chosenClasses = possibleClasses.slice(0, numClasses);
+  
+  // Store passenger data in an object: { ECONOMY: 123, BUSINESS: 45, FIRST: 12 }, or "N/A" if not chosen
+  const passengerTotals = {ECONOMY:"N/A", BUSINESS:"N/A", FIRST:"N/A"};
+  chosenClasses.forEach(cls => {
+    switch(cls){
+      case "ECONOMY":
+        passengerTotals.ECONOMY = randInt(50, 500); break;
+      case "BUSINESS":
+        passengerTotals.BUSINESS = randInt(5, 200); break;
+      case "FIRST":
+        passengerTotals.FIRST = randInt(2, 40); break;
+    }
+  });
+
+  // 3 or 4 legs
   const numLegs = randInt(3,4);
-  
-  // We need (numLegs+1) distinct cities
-  // e.g. if 3 legs => route has 4 cities total: departure, stop1, stop2, final
-  // if 4 legs => route has 5 cities total: departure, s1, s2, s3, final
+  // routeCities
   const totalCitiesNeeded = numLegs + 1;
-  
   const routeSet = new Set();
   while (routeSet.size < totalCitiesNeeded) {
     routeSet.add(randElem(cities));
   }
-  const routeCities = [...routeSet]; // e.g. [dep, st1, st2, (st3?), final]
-
-  // We’ll generate flight times for each leg
+  const routeCities = [...routeSet];
+  
+  // times
   const times = [];
-  for (let i=0; i<numLegs; i++) {
+  for (let i=0; i<numLegs; i++){
     times.push(randomFlightTime());
+  }
+
+  // passenger changes for intermediate stops
+  const passengerChanges = []; 
+  const intermediateCount = numLegs - 1; // last city is final
+  for (let i=0; i<intermediateCount; i++){
+    // for each class that exists, store random off/on
+    const changeObj = {};
+    if (chosenClasses.includes("ECONOMY")) {
+      changeObj.ECONOMY = {
+        off: randInt(0, Math.floor((passengerTotals.ECONOMY === "N/A"? 0 : passengerTotals.ECONOMY)/4)),
+        on: randInt(0, 60)
+      };
+    }
+    if (chosenClasses.includes("BUSINESS")) {
+      changeObj.BUSINESS = {
+        off: randInt(0, Math.floor((passengerTotals.BUSINESS === "N/A"? 0 : passengerTotals.BUSINESS)/4)),
+        on: randInt(0, 30)
+      };
+    }
+    if (chosenClasses.includes("FIRST")) {
+      changeObj.FIRST = {
+        off: randInt(0, Math.floor((passengerTotals.FIRST === "N/A"? 0 : passengerTotals.FIRST)/4)),
+        on: randInt(0, 10)
+      };
+    }
+    passengerChanges.push(changeObj);
   }
 
   return {
     flightNumber: randomFlightNumber(),
     registration: randElem(registrations),
     aircraftType: randElem(aircraftTypes),
-    routeCities, // array
-    times,       // array
     numLegs,
-    firstClass: randInt(5,40),
-    businessClass: randInt(20,200),
-    economy: randInt(100,500),
+    routeCities,
+    times,
+    classes: chosenClasses, // which classes exist
+    passengers: passengerTotals, // { ECONOMY:x, BUSINESS:y, FIRST:z or N/A }
+    passengerChanges, // array of objects, one per stop
     crew: randInt(8,18),
     runwayDep: randElem(runwayNumbers),
-    runwayArr: randElem(runwayNumbers), // Not always used in text
+    runwayArr: randElem(runwayNumbers),
     flightLevel: randElem(flightLevels),
     interceptAltitude: randElem(altitudeIntercepts),
     heading: randElem(headings)
   };
 }
 
-// Some random sentence variations to add flavor
-const routeSentenceOptions = [
-  "BETWEEN ROUTE, THIS FLIGHT WILL MAKE STOPOVERS FOR CHANGING PASSENGERS, CREWS AND REFUELING.",
-  "DURING THE JOURNEY, THE FLIGHT WILL STOP FOR PASSENGER TRANSFERS, CREW ROTATION, AND REFUELING.",
-  "ALONG THE ROUTE, THIS FLIGHT WILL HAVE STOPOVERS FOR EXCHANGING PASSENGERS, SWITCHING CREWS, AND TAKING FUEL."
-];
-const departurePhraseOptions = [
-  "FOR DEPARTURE FROM",
-  "UPON DEPARTING FROM",
-  "WHEN TAKING OFF AT"
-];
-const climbPhraseOptions = [
-  "THEY ARE CLEARED TO CLIMB AND MAINTAIN",
-  "THE FLIGHT IS CLEARED TO PROCEED TO FINAL CRUISE AT",
-  "FOR CLIMB OUT, THEY ARE CLEARED TO MAINTAIN"
-];
-
-// Build the text passage
+/* 
+   Build the passage text.
+   - Use the same example style phrases
+   - Only mention the classes that exist
+   - Add random passenger on/off lines for each stop
+*/
 function buildPassage(data) {
-  const routeSent = randElem(routeSentenceOptions);
-  const depPhrase = randElem(departurePhraseOptions);
-  const climbPhrase = randElem(climbPhraseOptions);
-  
-  const allCities = data.routeCities;
-  // e.g. for 3 legs, [dep, stop1, stop2, final]
-  // for 4 legs, [dep, stop1, stop2, stop3, final]
-  const stops = allCities.slice(1, allCities.length-1); // excludes dep & final
-  const departure = allCities[0];
-  const finalCity = allCities[allCities.length-1];
-  
-  // Build a line about each leg’s flight time
-  // "FROM X TO Y IS T HOURS," repeated
+  const departure = data.routeCities[0];
+  const finalCity = data.routeCities[data.routeCities.length - 1];
+  const intermediateStops = data.routeCities.slice(1, data.routeCities.length - 1);
+
+  // Build flight time lines
   let timeDescription = "";
   for (let i=0; i<data.numLegs; i++){
-    const legStart = allCities[i];
-    const legEnd = allCities[i+1];
-    const t = data.times[i];
-    timeDescription += `FROM ${legStart} TO ${legEnd} IS ${t} HOURS, `;
+    const start = data.routeCities[i];
+    const end = data.routeCities[i+1];
+    timeDescription += `FROM ${start} TO ${end} IS ${data.times[i]} HOURS, `;
   }
-  // Trim trailing comma
-  timeDescription = timeDescription.slice(0,-2);
+  timeDescription = timeDescription.slice(0, -2);
 
-  // The crew changes at the last intermediate stop = second-to-last city in the route:
-  // allCities.length - 2
-  const crewChangeCity = allCities[allCities.length - 2];
+  // Mention total passengers only for the classes that exist
+  // e.g. "THEY ARE 120 PASSENGERS IN ECONOMY, 30 IN BUSINESS, ETC."
+  let passengerTotalsDesc = "";
+  if (data.classes.includes("ECONOMY")) {
+    passengerTotalsDesc += `${data.passengers.ECONOMY} PASSENGERS IN ECONOMY, `;
+  }
+  if (data.classes.includes("BUSINESS")) {
+    passengerTotalsDesc += `${data.passengers.BUSINESS} IN BUSINESS CLASS, `;
+  }
+  if (data.classes.includes("FIRST")) {
+    passengerTotalsDesc += `${data.passengers.FIRST} IN FIRST CLASS, `;
+  }
+  // Remove trailing comma
+  passengerTotalsDesc = passengerTotalsDesc.slice(0, -2);
 
-  // Build final passage text
+  // Crew changes at last intermediate city
+  const crewChangeCity = data.routeCities[data.routeCities.length - 2];
+
+  // Build lines describing passenger on/off at each intermediate stop
+  // data.passengerChanges[i] corresponds to data.routeCities[i+1]
+  let passengerChangeDesc = "";
+  for (let i=0; i<intermediateStops.length; i++){
+    const stopCity = intermediateStops[i];
+    const changesObj = data.passengerChanges[i];
+    let line = `AFTER ARRIVAL AT ${stopCity}, `;
+    // For each class that exists:
+    const classSnippets = [];
+    if (data.classes.includes("ECONOMY")) {
+      const econ = changesObj.ECONOMY;
+      classSnippets.push(`${econ.off} PASSENGERS IN ECONOMY GET OFF AND ${econ.on} GET ON`);
+    }
+    if (data.classes.includes("BUSINESS")) {
+      const biz = changesObj.BUSINESS;
+      classSnippets.push(`${biz.off} IN BUSINESS CLASS GET OFF AND ${biz.on} GET ON`);
+    }
+    if (data.classes.includes("FIRST")) {
+      const fst = changesObj.FIRST;
+      classSnippets.push(`${fst.off} IN FIRST CLASS GET OFF AND ${fst.on} GET ON`);
+    }
+    line += classSnippets.join(", ") + ". ";
+    passengerChangeDesc += line;
+  }
+
   return `
     <h2>MEMORY - 3 MINUTES</h2>
     <p>
       THIS IS FLIGHT ${data.flightNumber} REGISTRATION NUMBER ${data.registration}. 
       TYPE OF THE AIRCRAFT IS ${data.aircraftType}, FROM ${departure} TO ${finalCity}. 
-      ${routeSent} THEY ARE ${stops.join(", ")}. 
+      BETWEEN ROUTE, THIS FLIGHT WILL MAKE LANDINGS FOR CHANGING PASSENGERS, AIR CREWS AND REFUELING. 
+      THEY ARE ${intermediateStops.join(", ")}. 
       ${timeDescription}. 
-      THEY ARE ${data.firstClass} PASSENGERS IN FIRST CLASS, ${data.businessClass} IN BUSINESS CLASS 
-      AND ${data.economy} PASSENGERS IN ECONOMY. 
+      THEY ARE ${passengerTotalsDesc}. 
       ON THE CABIN ${data.crew} AIRCREWS ARE WORKING UNTIL ${crewChangeCity}, THEN IT WILL CHANGE ALL AIRCREWS THERE. 
-      ${depPhrase} ${departure} THE PILOTS USED RUNWAY ${data.runwayDep} FOR TAKE OFF. 
-      WHEN REACHING ${data.interceptAltitude} FEET, THEY ARE VECTORED TO TURN RIGHT HEADING ${data.heading} 
-      FOR INTERCEPT THE AIRWAY AND THEY ARE CLEARED FOR CLIMBING TO MAINTAIN ${data.flightLevel}. 
-      ${climbPhrase} ${data.flightLevel} FOR FINAL LEVEL.
+      ${passengerChangeDesc}
+      FOR DEPARTURE IN ${departure} THE PILOTS USED RUNWAY ${data.runwayDep} FOR TAKE OFF. 
+      WHEN REACHING ${data.interceptAltitude} FEET THEY ARE VECTORED TO TURN RIGHT HEADING ${data.heading} 
+      FOR INTERCEPT THE AIRWAY AND THEY ARE CLEARED FOR CLIMBING TO MAINTAIN ${data.flightLevel} FOR FINAL LEVEL.
     </p>
   `;
 }
 
-// --- QUESTION POOL ---
+/* QUESTION POOL:
+   If a class does not exist, we return "N/A" in the answer.
+*/
 const questionPool = [
   {
     text: "WHAT IS THE FLIGHT NUMBER?",
@@ -284,39 +357,51 @@ const questionPool = [
     answer: d => d.crew
   },
   {
+    text: "HOW MANY PASSENGERS IN ECONOMY CLASS?",
+    answer: d => d.classes.includes("ECONOMY") ? d.passengers.ECONOMY : "N/A"
+  },
+  {
+    text: "HOW MANY PASSENGERS IN BUSINESS CLASS?",
+    answer: d => d.classes.includes("BUSINESS") ? d.passengers.BUSINESS : "N/A"
+  },
+  {
+    text: "HOW MANY PASSENGERS IN FIRST CLASS?",
+    answer: d => d.classes.includes("FIRST") ? d.passengers.FIRST : "N/A"
+  },
+  {
     text: "WHERE DID THE FLIGHT DEPART FROM?",
     answer: d => d.routeCities[0]
   },
   {
     text: "WHAT IS THE FINAL DESTINATION?",
-    answer: d => d.routeCities[d.routeCities.length-1]
+    answer: d => d.routeCities[d.routeCities.length - 1]
   },
   {
-    text: "HOW MANY PASSENGERS IN FIRST CLASS?",
-    answer: d => d.firstClass
-  },
-  {
-    text: "HOW MANY PASSENGERS IN BUSINESS CLASS?",
-    answer: d => d.businessClass
-  },
-  {
-    text: "HOW MANY PASSENGERS IN ECONOMY?",
-    answer: d => d.economy
+    text: "HOW MANY TOTAL FLIGHT LEGS DOES THIS TRIP HAVE?",
+    answer: d => d.numLegs
   },
   {
     text: "NAME ALL THE INTERMEDIATE STOPOVERS IN ORDER.",
     answer: d => d.routeCities.slice(1, d.routeCities.length-1).join(", ")
   },
   {
-    text: "WHERE DID THE AIRCREW CHANGE OCCUR?",
-    answer: d => d.routeCities[d.routeCities.length-2]
+    text: "WHICH AIRPORT DOES THE CREW CHANGE OCCUR?",
+    answer: d => d.routeCities[d.routeCities.length - 2]
   },
   {
-    text: "WHAT RUNWAY DID THEY USE FOR TAKEOFF?",
+    text: "HOW LONG IS THE FLIGHT TIME FOR THE FIRST LEG?",
+    answer: d => `${d.times[0]} HOURS`
+  },
+  {
+    text: "WHAT IS THE RUNWAY USED FOR TAKE OFF?",
     answer: d => d.runwayDep
   },
   {
-    text: "HOW HIGH WERE THEY WHEN VECTORED TO TURN RIGHT?",
+    text: "WHAT IS THE FINAL CRUISE LEVEL?",
+    answer: d => d.flightLevel
+  },
+  {
+    text: "HOW HIGH ARE THEY WHEN VECTORED TO TURN RIGHT?",
     answer: d => `${d.interceptAltitude} FEET`
   },
   {
@@ -324,16 +409,30 @@ const questionPool = [
     answer: d => `${d.heading}`
   },
   {
-    text: "WHAT IS THE FINAL CRUISE LEVEL?",
-    answer: d => d.flightLevel
+    text: "HOW MANY PASSENGERS GET OFF IN ECONOMY CLASS AT THE FIRST STOP?",
+    answer: d => {
+      if (!d.classes.includes("ECONOMY")) return "N/A";
+      return d.numLegs > 1 ? d.passengerChanges[0].ECONOMY.off : "N/A";
+    }
   },
   {
-    text: "HOW MANY TOTAL FLIGHT LEGS DOES THIS TRIP HAVE?",
-    answer: d => d.numLegs
+    text: "HOW MANY PASSENGERS GET ON IN BUSINESS CLASS AT THE SECOND STOP?",
+    answer: d => {
+      if (!d.classes.includes("BUSINESS")) return "N/A";
+      return d.numLegs > 2 ? d.passengerChanges[1].BUSINESS.on : "N/A";
+    }
   },
   {
-    text: "HOW LONG IS THE FIRST LEG?",
-    answer: d => `${d.times[0]} HOURS`
+    text: "HOW MANY PASSENGERS GET OFF IN FIRST CLASS AT THE LAST INTERMEDIATE STOP?",
+    answer: d => {
+      if (!d.classes.includes("FIRST")) return "N/A";
+      const i = d.numLegs - 2; // index for last stop
+      return i >= 0 ? d.passengerChanges[i].FIRST.off : "N/A";
+    }
+  },
+  {
+    text: "LIST THE ENTIRE ROUTE (DEPARTURE TO FINAL).",
+    answer: d => d.routeCities.join(" - ")
   },
   {
     text: "HOW LONG IS THE FINAL LEG?",
@@ -341,45 +440,27 @@ const questionPool = [
   },
   {
     text: "HOW MANY PASSENGERS IN TOTAL?",
-    answer: d => d.firstClass + d.businessClass + d.economy
+    answer: d => {
+      // sum of existing classes
+      let sum = 0;
+      if (d.classes.includes("ECONOMY")) sum += d.passengers.ECONOMY;
+      if (d.classes.includes("BUSINESS")) sum += d.passengers.BUSINESS;
+      if (d.classes.includes("FIRST")) sum += d.passengers.FIRST;
+      return sum === 0 ? "N/A" : sum;
+    }
   },
-  {
-    text: "LIST THE ENTIRE ROUTE (DEPARTURE TO FINAL).",
-    answer: d => d.routeCities.join(" - ")
-  },
-  {
-    text: "WHAT IS THE SECOND INTERMEDIATE STOP?",
-    // For a 3-leg flight: stops are routeCities[1], routeCities[2].
-    // The 'second' would be routeCities[2]. For 4-leg flight: routeCities[1], routeCities[2], routeCities[3].
-    // The 'second' is still routeCities[2] if it exists:
-    answer: d => (d.numLegs >= 3 ? d.routeCities[2] : "NONE")
-  },
-  {
-    text: "WHAT IS THE APPROXIMATE FLIGHT TIME OF THE SECOND LEG?",
-    answer: d => (d.numLegs >= 2 ? `${d.times[1]} HOURS` : "N/A")
-  }
 ];
 
-// Shuffle array in place
-function shuffle(arr) {
-  for (let i=arr.length-1; i>0; i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-}
-
-// Pick N distinct questions from questionPool
+// Shuffle question pool and pick 10
 function pickQuestions(data, count=10) {
-  const poolCopy = [...questionPool];
-  shuffle(poolCopy);
-  const selected = poolCopy.slice(0,count);
-  // Return them with the resolved answer
-  const questions = selected.map((q, idx) => ({
+  const copy = [...questionPool];
+  shuffleArr(copy);
+  const selected = copy.slice(0,count);
+  return selected.map((q,idx) => ({
     number: idx+1,
     text: q.text,
     answer: q.answer(data)
   }));
-  return questions;
 }
 
 function buildQuestionsHTML(questions) {
@@ -390,7 +471,6 @@ function buildQuestionsHTML(questions) {
   html += `</ol>`;
   return html;
 }
-
 function buildAnswersHTML(questions) {
   let html = `<h2>ANSWERS</h2><ol>`;
   questions.forEach(q => {
@@ -400,9 +480,11 @@ function buildAnswersHTML(questions) {
   return html;
 }
 
-/* TIMER & PAGE BEHAVIOR */
-let timeLeft = 180;
-let timerInterval = null;
+/* --------------------------
+   TIMER & PAGE BEHAVIOR
+-------------------------- */
+let timeLeft = 180; 
+let timerInterval = null; 
 let timerRunning = false;
 
 function updateTimerDisplay() {
@@ -426,15 +508,12 @@ function startTimer() {
 }
 
 function stopTimer() {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-  }
+  if (timerInterval) clearInterval(timerInterval);
   timerInterval = null;
 }
 
 function toggleStartStopTimer() {
   if (!timerRunning) {
-    // Start
     timerRunning = true;
     $("#toggleStartStopBtn").text("STOP TIMER");
     // If time is 0 or 180, reset
@@ -444,7 +523,6 @@ function toggleStartStopTimer() {
     }
     startTimer();
   } else {
-    // Stop
     timerRunning = false;
     $("#toggleStartStopBtn").text("START TIMER");
     stopTimer();
@@ -463,7 +541,7 @@ $(document).ready(function(){
     const data = generateTestData();
     // Build passage
     $("#passageSection").html(buildPassage(data));
-    // Build Q&A from random question selection
+    // Build Q&A
     currentQuestions = pickQuestions(data, 10);
     $("#questionsSection").html(buildQuestionsHTML(currentQuestions));
     $("#answersSection").html(buildAnswersHTML(currentQuestions));
@@ -483,7 +561,7 @@ $(document).ready(function(){
 
   $("#toggleStartStopBtn").click(() => toggleStartStopTimer());
 
-  // Initialize timer display
+  // Initialize timer
   updateTimerDisplay();
 });
 </script>
