@@ -1,4 +1,3 @@
- 
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -84,8 +83,11 @@
 
 <script>
 /* 
-  RANDOM DATA & QUESTIONS, WITH 2–3 CLASSES SELECTED FROM [ECONOMY, BUSINESS, FIRST].
-  IF A CLASS IS NOT SELECTED, ITS ANSWERS BECOME "N/A".
+  CODE FEATURES:
+  1. 3-4 LEGS => 2-3 INTERMEDIATE STOPS
+  2. PASSENGER CHANGES HAPPEN AT LEAST 2 STOPS, AND UP TO ALL STOPS
+  3. STILL 2-3 CLASSES (ECON, BUSINESS, FIRST) SELECTED RANDOMLY
+  4. SINGLE-PAGE W/ 3 SUB-PAGES + TIMER
 */
 
 /* --------------------------
@@ -110,9 +112,8 @@ const registrations = [
 
 // 3) RANDOM FLIGHT NUMBER = CARRIER + 3–4 DIGITS
 const carriers = [
-  "TG", "QF", "CA", "BA", "AF", "LH", "EK", "SQ", "CX", "UA",
-  "DL", "JL", "GA", "MH", "NZ", "AK", "EY", "QR", "KL", "IB",
-  "AZ", "SU", "AA", "AC", "AI"
+  "TG","QF","CA","BA","AF","LH","EK","SQ","CX","UA","DL","JL","GA",
+  "MH","NZ","AK","EY","QR","KL","IB","AZ","SU","AA","AC","AI"
 ];
 function randomFlightNumber() {
   const carrier = randElem(carriers);
@@ -137,7 +138,7 @@ const cities = [
 // 5) RANDOM RUNWAY 01–36
 const runwayNumbers = Array.from({length:36}, (_, i) => (i+1).toString().padStart(2,"0"));
 
-// Other arrays
+// Misc
 const aircraftTypes = [
   "AIRBUS 330-300","AIRBUS 340-300","AIRBUS 300-600","AIRBUS 380",
   "BOEING 747-400","BOEING 777-300","BOEING 787-9","AIRBUS A350-900"
@@ -145,7 +146,7 @@ const aircraftTypes = [
 const altitudeIntercepts = [2500,3000,3500,4000,4500,5000];
 const headings = [250,260,270,280,290,300,310,320];
 
-// Helper random functions
+// Helper randoms
 function randElem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -159,7 +160,6 @@ function shuffleArr(arr) {
   }
   return arr;
 }
-// random flight time in format "H:MM"
 function randomFlightTime() {
   const hrs = randInt(1,7);
   const mins = randInt(0,59).toString().padStart(2,"0");
@@ -169,19 +169,19 @@ function randomFlightTime() {
 /* 
    Generate test data:
    1) 2 or 3 classes from [ECONOMY, BUSINESS, FIRST]
-   2) 3–4 legs
-   3) For each chosen class, random total passenger count
-   4) For each intermediate stop, random on/off for each chosen class
+   2) 3–4 legs => 2 or 3 intermediate stops
+   3) Among the intermediate stops, pick at least 2 stops, up to all, that have passenger changes. 
+      Others have zero changes.
 */
 function generateTestData() {
-  // Random how many classes: 2 or 3
-  const possibleClasses = ["ECONOMY", "BUSINESS", "FIRST"];
+  // Pick 2 or 3 classes
+  const possibleClasses = ["ECONOMY","BUSINESS","FIRST"];
   shuffleArr(possibleClasses);
   const numClasses = randInt(2,3);
   const chosenClasses = possibleClasses.slice(0, numClasses);
-  
-  // Store passenger data in an object: { ECONOMY: 123, BUSINESS: 45, FIRST: 12 }, or "N/A" if not chosen
-  const passengerTotals = {ECONOMY:"N/A", BUSINESS:"N/A", FIRST:"N/A"};
+
+  // Assign random total passenger counts to chosen classes
+  const passengerTotals = { ECONOMY:"N/A", BUSINESS:"N/A", FIRST:"N/A" };
   chosenClasses.forEach(cls => {
     switch(cls){
       case "ECONOMY":
@@ -193,47 +193,67 @@ function generateTestData() {
     }
   });
 
-  // 3 or 4 legs
+  // 3-4 legs
   const numLegs = randInt(3,4);
-  // routeCities
-  const totalCitiesNeeded = numLegs + 1;
   const routeSet = new Set();
-  while (routeSet.size < totalCitiesNeeded) {
+  while (routeSet.size < numLegs+1) {
     routeSet.add(randElem(cities));
   }
   const routeCities = [...routeSet];
   
-  // times
+  // flight times
   const times = [];
   for (let i=0; i<numLegs; i++){
     times.push(randomFlightTime());
   }
 
-  // passenger changes for intermediate stops
-  const passengerChanges = []; 
-  const intermediateCount = numLegs - 1; // last city is final
+  // How many intermediate stops => numLegs-1
+  // We must ensure at least 2 stops have changes, up to "intermediateCount" stops
+  const intermediateCount = numLegs - 1; 
+  // If intermediateCount <=2, we have no choice: all must have changes
+  // If intermediateCount=3, pick either 2 or 3 stops to have changes
+  let stopsToChange = intermediateCount;
+  if (intermediateCount === 3) {
+    stopsToChange = randInt(2,3); 
+  }
+  // Randomly choose which stops among the intermediate stops have changes
+  // For convenience, create an array [0,1,2,...] representing the stops
+  const indices = Array.from({length:intermediateCount}, (_,i) => i);
+  shuffleArr(indices);
+  const chosenStopIndices = indices.slice(0, stopsToChange); // these stops get random changes
+
+  // Build passengerChanges array with length=intermediateCount
+  // Each element is an object { ECONOMY:{off,on}, BUSINESS:..., FIRST:...} or zeros if not chosen
+  const passengerChanges = [];
   for (let i=0; i<intermediateCount; i++){
-    // for each class that exists, store random off/on
-    const changeObj = {};
+    // If i not in chosenStopIndices => off=on=0 for all chosen classes
+    const hasChanges = chosenStopIndices.includes(i);
+    const changesObj = {};
     if (chosenClasses.includes("ECONOMY")) {
-      changeObj.ECONOMY = {
-        off: randInt(0, Math.floor((passengerTotals.ECONOMY === "N/A"? 0 : passengerTotals.ECONOMY)/4)),
-        on: randInt(0, 60)
-      };
+      changesObj.ECONOMY = { off:0, on:0 };
+      if (hasChanges) {
+        const maxOff = Math.floor(passengerTotals.ECONOMY/4);
+        changesObj.ECONOMY.off = randInt(0, maxOff);
+        changesObj.ECONOMY.on = randInt(0,60);
+      }
     }
     if (chosenClasses.includes("BUSINESS")) {
-      changeObj.BUSINESS = {
-        off: randInt(0, Math.floor((passengerTotals.BUSINESS === "N/A"? 0 : passengerTotals.BUSINESS)/4)),
-        on: randInt(0, 30)
-      };
+      changesObj.BUSINESS = { off:0, on:0 };
+      if (hasChanges) {
+        const maxOff = Math.floor(passengerTotals.BUSINESS/4);
+        changesObj.BUSINESS.off = randInt(0, maxOff);
+        changesObj.BUSINESS.on = randInt(0,30);
+      }
     }
     if (chosenClasses.includes("FIRST")) {
-      changeObj.FIRST = {
-        off: randInt(0, Math.floor((passengerTotals.FIRST === "N/A"? 0 : passengerTotals.FIRST)/4)),
-        on: randInt(0, 10)
-      };
+      changesObj.FIRST = { off:0, on:0 };
+      if (hasChanges) {
+        const maxOff = Math.floor(passengerTotals.FIRST/4);
+        changesObj.FIRST.off = randInt(0, maxOff);
+        changesObj.FIRST.on = randInt(0,10);
+      }
     }
-    passengerChanges.push(changeObj);
+    passengerChanges.push(changesObj);
   }
 
   return {
@@ -243,9 +263,9 @@ function generateTestData() {
     numLegs,
     routeCities,
     times,
-    classes: chosenClasses, // which classes exist
-    passengers: passengerTotals, // { ECONOMY:x, BUSINESS:y, FIRST:z or N/A }
-    passengerChanges, // array of objects, one per stop
+    classes: chosenClasses,
+    passengers: passengerTotals,
+    passengerChanges,
     crew: randInt(8,18),
     runwayDep: randElem(runwayNumbers),
     runwayArr: randElem(runwayNumbers),
@@ -255,12 +275,7 @@ function generateTestData() {
   };
 }
 
-/* 
-   Build the passage text.
-   - Use the same example style phrases
-   - Only mention the classes that exist
-   - Add random passenger on/off lines for each stop
-*/
+/* Build the passage text in the sample style. */
 function buildPassage(data) {
   const departure = data.routeCities[0];
   const finalCity = data.routeCities[data.routeCities.length - 1];
@@ -273,10 +288,9 @@ function buildPassage(data) {
     const end = data.routeCities[i+1];
     timeDescription += `FROM ${start} TO ${end} IS ${data.times[i]} HOURS, `;
   }
-  timeDescription = timeDescription.slice(0, -2);
+  timeDescription = timeDescription.slice(0,-2);
 
   // Mention total passengers only for the classes that exist
-  // e.g. "THEY ARE 120 PASSENGERS IN ECONOMY, 30 IN BUSINESS, ETC."
   let passengerTotalsDesc = "";
   if (data.classes.includes("ECONOMY")) {
     passengerTotalsDesc += `${data.passengers.ECONOMY} PASSENGERS IN ECONOMY, `;
@@ -287,35 +301,42 @@ function buildPassage(data) {
   if (data.classes.includes("FIRST")) {
     passengerTotalsDesc += `${data.passengers.FIRST} IN FIRST CLASS, `;
   }
-  // Remove trailing comma
-  passengerTotalsDesc = passengerTotalsDesc.slice(0, -2);
+  passengerTotalsDesc = passengerTotalsDesc.slice(0,-2);
 
-  // Crew changes at last intermediate city
-  const crewChangeCity = data.routeCities[data.routeCities.length - 2];
+  // Crew change at the last intermediate stop
+  const crewChangeCity = data.routeCities[data.routeCities.length - 2] || finalCity;
 
-  // Build lines describing passenger on/off at each intermediate stop
-  // data.passengerChanges[i] corresponds to data.routeCities[i+1]
+  // Build lines describing passenger on/off at each stop
   let passengerChangeDesc = "";
   for (let i=0; i<intermediateStops.length; i++){
     const stopCity = intermediateStops[i];
     const changesObj = data.passengerChanges[i];
-    let line = `AFTER ARRIVAL AT ${stopCity}, `;
-    // For each class that exists:
-    const classSnippets = [];
+    // If all off/on are zero => means no changes
+    const lines = [];
     if (data.classes.includes("ECONOMY")) {
       const econ = changesObj.ECONOMY;
-      classSnippets.push(`${econ.off} PASSENGERS IN ECONOMY GET OFF AND ${econ.on} GET ON`);
+      if (econ.off>0 || econ.on>0) {
+        lines.push(`${econ.off} PASSENGERS IN ECONOMY GET OFF AND ${econ.on} GET ON`);
+      }
     }
     if (data.classes.includes("BUSINESS")) {
       const biz = changesObj.BUSINESS;
-      classSnippets.push(`${biz.off} IN BUSINESS CLASS GET OFF AND ${biz.on} GET ON`);
+      if (biz.off>0 || biz.on>0) {
+        lines.push(`${biz.off} IN BUSINESS CLASS GET OFF AND ${biz.on} GET ON`);
+      }
     }
     if (data.classes.includes("FIRST")) {
       const fst = changesObj.FIRST;
-      classSnippets.push(`${fst.off} IN FIRST CLASS GET OFF AND ${fst.on} GET ON`);
+      if (fst.off>0 || fst.on>0) {
+        lines.push(`${fst.off} IN FIRST CLASS GET OFF AND ${fst.on} GET ON`);
+      }
     }
-    line += classSnippets.join(", ") + ". ";
-    passengerChangeDesc += line;
+
+    if (lines.length>0) {
+      passengerChangeDesc += `AFTER ARRIVAL AT ${stopCity}, ${lines.join(", ")}. `;
+    } else {
+      passengerChangeDesc += `AFTER ARRIVAL AT ${stopCity}, NO PASSENGERS GET ON OR OFF. `;
+    }
   }
 
   return `
@@ -336,9 +357,8 @@ function buildPassage(data) {
   `;
 }
 
-/* QUESTION POOL:
-   If a class does not exist, we return "N/A" in the answer.
-*/
+
+/* QUESTION POOL (unchanged from previous logic). */
 const questionPool = [
   {
     text: "WHAT IS THE FLIGHT NUMBER?",
@@ -426,8 +446,8 @@ const questionPool = [
     text: "HOW MANY PASSENGERS GET OFF IN FIRST CLASS AT THE LAST INTERMEDIATE STOP?",
     answer: d => {
       if (!d.classes.includes("FIRST")) return "N/A";
-      const i = d.numLegs - 2; // index for last stop
-      return i >= 0 ? d.passengerChanges[i].FIRST.off : "N/A";
+      const i = d.numLegs - 2;
+      return i>=0 ? d.passengerChanges[i].FIRST.off : "N/A";
     }
   },
   {
@@ -441,7 +461,6 @@ const questionPool = [
   {
     text: "HOW MANY PASSENGERS IN TOTAL?",
     answer: d => {
-      // sum of existing classes
       let sum = 0;
       if (d.classes.includes("ECONOMY")) sum += d.passengers.ECONOMY;
       if (d.classes.includes("BUSINESS")) sum += d.passengers.BUSINESS;
